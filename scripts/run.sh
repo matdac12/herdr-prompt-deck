@@ -36,7 +36,12 @@ target="$(focused_field "$panes" pane_id)"
 cwd="$(focused_field "$panes" cwd)"
 cwd="${cwd:-$PWD}"
 
-out="$("$herdr_bin" pane split --direction down --cwd "$cwd" --focus)"
+config_dir="$("$herdr_bin" plugin config-dir prompt-deck 2>/dev/null || true)"
+split_args=(pane split --direction down --cwd "$cwd" --ratio 0.9 --focus)
+if [ -n "$config_dir" ]; then
+    split_args+=(--env "HERDR_PLUGIN_CONFIG_DIR=$config_dir")
+fi
+out="$("$herdr_bin" "${split_args[@]}")"
 new_pane="$(printf '%s' "$out" | grep -o '"pane_id":"[^"]*"' | head -n1 | cut -d'"' -f4)"
 if [ -z "$new_pane" ]; then
     exit 1

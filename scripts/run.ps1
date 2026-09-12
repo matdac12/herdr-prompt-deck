@@ -55,9 +55,19 @@ if (-not $target) {
 if (-not $target) { exit 1 }
 
 $cwd = Strip-Verbatim $target.cwd
+
+# `pane run` does not get the plugin environment herdr injects into manifest panes,
+# so pass the plugin config dir explicitly; snippets.toml lives there.
+$configDir = ''
+try {
+    $d = (& $HerdrBin plugin config-dir prompt-deck | Out-String).Trim()
+    if ($d) { $configDir = Strip-Verbatim $d }
+} catch {}
+
 # --ratio is the share kept by the pane being split, so the deck gets the remainder.
 # 0.9 leaves the agent ~90% and makes the bar as slim as herdr allows.
 $splitArgs = @('pane', 'split', '--direction', 'down', '--cwd', $cwd, '--ratio', '0.9', '--focus')
+if ($configDir) { $splitArgs += @('--env', "HERDR_PLUGIN_CONFIG_DIR=$configDir") }
 $out = (& $HerdrBin @splitArgs | Out-String)
 $newPane = ([regex]'"pane_id":"([^"]+)"').Match($out).Groups[1].Value
 if (-not $newPane) { exit 1 }
