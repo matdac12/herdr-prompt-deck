@@ -1,6 +1,6 @@
 id = "prompt-deck"
 name = "Prompt Deck"
-version = "0.1.0"
+version = "0.2.0"
 description = "A bottom prompt bar: insert file paths, saved snippets, and scratch text into the focused agent without submitting."
 min_herdr_version = "0.8.0"
 platforms = ["linux", "macos", "windows"]

@@ -520,9 +520,40 @@ impl App {
     }
 
     fn editor_key(&mut self, key: KeyEvent) {
-        if key.code == KeyCode::Enter {
-            self.open_scratch_editor();
+        match key.code {
+            KeyCode::Enter => self.open_scratch_editor(),
+            // On platforms without the floating window, the OS editor writes
+            // `scratch.md`; this sends it back to the agent.
+            #[cfg(not(windows))]
+            KeyCode::Char('s') => self.send_scratch_file(),
+            _ => {}
         }
+    }
+
+    /// Read `scratch.md` and insert its contents into the target pane.
+    #[cfg(not(windows))]
+    fn send_scratch_file(&mut self) {
+        let text = match std::fs::read_to_string(scratch_path()) {
+            Ok(text) => text,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                self.status = Some("scratch file not found".to_string());
+                return;
+            }
+            Err(err) => {
+                self.status = Some(format!("read failed: {err}"));
+                return;
+            }
+        };
+        if text.is_empty() {
+            self.status = Some("scratchpad is empty".to_string());
+            return;
+        }
+        if self.target.is_empty() {
+            self.status = Some("no target pane".to_string());
+            return;
+        }
+        send_text(&self.target, &text);
+        self.status = Some("sent scratchpad to agent".to_string());
     }
 
     fn edit_key(&mut self, key: KeyEvent) {
@@ -970,21 +1001,24 @@ fn content_snippets(app: &App) -> Vec<Line<'static>> {
 }
 
 fn content_editor() -> Vec<Line<'static>> {
-    let subtitle = if cfg!(windows) {
-        "  Press ↵ to open the floating scratchpad window"
+    let lines = if cfg!(windows) {
+        [
+            "  Press ↵ to open the floating scratchpad window",
+            "  compose there, then Ctrl+Enter sends it to the agent",
+        ]
     } else {
-        "  Press ↵ to open the scratchpad in your editor"
+        [
+            "  ↵ opens the scratchpad in your editor - write, save, close",
+            "  then press s here to send it to the agent",
+        ]
     };
     vec![
         Line::from(Span::styled(
             "Editor",
             Style::default().add_modifier(Modifier::BOLD),
         )),
-        Line::from(Span::styled(subtitle, Style::default().fg(Color::Gray))),
-        Line::from(Span::styled(
-            "  compose there, then Ctrl+Enter sends it to the agent",
-            Style::default().fg(Color::DarkGray),
-        )),
+        Line::from(Span::styled(lines[0], Style::default().fg(Color::Gray))),
+        Line::from(Span::styled(lines[1], Style::default().fg(Color::DarkGray))),
     ]
 }
 
@@ -1004,7 +1038,18 @@ fn footer(app: &App, width: u16) -> Paragraph<'static> {
                 ("tab", "tools"),
                 ("esc", "close"),
             ],
-            Mode::Editor => &[("↵", "open editor"), ("tab", "tools"), ("esc", "close")],
+            Mode::Editor => {
+                if cfg!(windows) {
+                    &[("↵", "open editor"), ("tab", "tools"), ("esc", "close")][..]
+                } else {
+                    &[
+                        ("↵", "open editor"),
+                        ("s", "send"),
+                        ("tab", "tools"),
+                        ("esc", "close"),
+                    ][..]
+                }
+            }
         }
     };
 

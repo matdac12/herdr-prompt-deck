@@ -1,6 +1,6 @@
 [package]
 name = "prompt-deck"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 description = "A bottom prompt bar for herdr: insert file paths, snippets, and scratch text into the focused agent."
 license = "MIT"

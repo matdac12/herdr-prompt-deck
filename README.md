@@ -120,7 +120,8 @@ On **Windows** the window is Prompt Deck's own always-on-top editor: type or pas
 over any app, press `Ctrl+O` for paths, `Ctrl+V` for screenshots, then `Ctrl+Enter` to
 send. Press `↵` in the deck again to raise the existing window instead of opening
 another. On **macOS / Linux** the OS editor is used instead (`$VISUAL` / `$EDITOR`,
-else `open -e` / `xdg-open`).
+else `open -e` / `xdg-open`): edit and save `scratch.md`, then press `s` on the Editor
+tab to send it to the agent.
 
 ## Screenshots
 
