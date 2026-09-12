@@ -105,7 +105,12 @@ Press `↵` on the Editor tab to open the floating scratchpad window.
 | --- | --- |
 | `Ctrl+Enter` | send the text into the target agent prompt |
 | `Ctrl+O` | open the native file dialog and insert the file's path |
-| *(button)* | **Send to agent** / **Insert file...** / **Clear** |
+| `Ctrl+V` | paste a clipboard screenshot: saves a PNG and inserts its path (normal text paste otherwise) |
+| *(button)* | **Send to agent** / **Paste screenshot** / **Insert file...** / **Clear** |
+
+Grab a region with **Win+Shift+S**, then press `Ctrl+V` in the window to drop the
+screenshot's path into your prompt — the agent can open the PNG. Screenshots are saved
+under the plugin config dir in `screenshots/`.
 
 The scratchpad is backed by a persistent file, `scratch.md`, in the same config
 directory as `snippets.toml`; closing the window keeps its text.

@@ -22,11 +22,15 @@ toml = "0.8"
 rfd = "0.15"
 
 # Win32 APIs for the native always-on-top scratchpad window (`prompt-deck window`).
+# `png` encodes a clipboard screenshot (CF_DIB) saved to a file.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
+    "Win32_System_DataExchange",
     "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_WindowsAndMessaging",
 ] }
+png = "0.17"

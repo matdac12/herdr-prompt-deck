@@ -190,6 +190,18 @@ fn scratch_path() -> PathBuf {
     config_dir().join("scratch.md")
 }
 
+/// Where screenshots pasted into the floating window are saved.
+#[cfg(windows)]
+fn screenshot_path() -> PathBuf {
+    let millis = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    config_dir()
+        .join("screenshots")
+        .join(format!("shot-{millis}.png"))
+}
+
 /// The GUI editor to open for the floating scratchpad on platforms without a
 /// native deck window. `$VISUAL` then `$EDITOR` take precedence; otherwise a
 /// platform default.
