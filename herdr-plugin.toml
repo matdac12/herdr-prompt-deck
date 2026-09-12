@@ -1,14 +1,21 @@
 id = "prompt-deck"
 name = "Prompt Deck"
-version = "0.0.1"
+version = "0.1.0"
 description = "A bottom prompt bar: insert file paths, saved snippets, and scratch text into the focused agent without submitting."
 min_herdr_version = "0.8.0"
 platforms = ["linux", "macos", "windows"]
 
-# herdr runs this at install time. Local `herdr plugin link` does not build, so authors
-# build the release binary themselves before linking.
+# At install time herdr runs the host-matching build script. Fast path: download the
+# prebuilt binary for this version + platform from GitHub Releases and verify its
+# SHA-256. Fallback: build from source with cargo, so a machine without Rust can
+# still install from source. Local `herdr plugin link` runs no build; authors build.
 [[build]]
-command = ["cargo", "build", "--release"]
+platforms = ["linux", "macos"]
+command = ["/bin/sh", "scripts/fetch-or-build.sh"]
+
+[[build]]
+platforms = ["windows"]
+command = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts/fetch-or-build.ps1"]
 
 # Toggle the deck. There is no declarative "open this pane" field on an action, so the
 # script opens/focuses the pane itself through the herdr CLI. Windows has no [[panes]]

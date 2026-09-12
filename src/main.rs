@@ -124,15 +124,18 @@ fn snippets_path() -> PathBuf {
 }
 
 fn load_snippets() -> Vec<Snippet> {
-    match std::fs::read_to_string(snippets_path()) {
+    let path = snippets_path();
+    match std::fs::read_to_string(&path) {
+        // A file we can read but not parse is left untouched; never clobber it.
         Ok(text) => toml::from_str::<SnippetFile>(&text)
             .map(|file| file.snippets)
             .unwrap_or_default(),
-        Err(_) => {
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
             let empty: Vec<Snippet> = Vec::new();
             let _ = save_snippets(&empty);
             empty
         }
+        Err(_) => Vec::new(),
     }
 }
 
@@ -436,9 +439,170 @@ impl App {
 // Entry / loop
 // ---------------------------------------------------------------------------
 
+const DECK_TITLE: &str = "Prompt Deck";
+
+fn herdr_output(args: &[&str]) -> io::Result<std::process::Output> {
+    Command::new(herdr()).args(args).output()
+}
+
+#[derive(Deserialize, Clone, Default)]
+struct Pane {
+    #[serde(default)]
+    pane_id: String,
+    #[serde(default)]
+    cwd: Option<String>,
+    #[serde(default)]
+    focused: bool,
+    #[serde(default)]
+    label: Option<String>,
+    #[serde(default)]
+    terminal_title: Option<String>,
+    #[serde(default)]
+    terminal_title_stripped: Option<String>,
+}
+
+impl Pane {
+    fn is_deck(&self) -> bool {
+        self.label.as_deref() == Some(DECK_TITLE)
+            || self.terminal_title.as_deref() == Some(DECK_TITLE)
+            || self.terminal_title_stripped.as_deref() == Some(DECK_TITLE)
+    }
+}
+
+fn pane_list() -> io::Result<Vec<Pane>> {
+    let out = herdr_output(&["pane", "list"])?;
+    let value: serde_json::Value =
+        serde_json::from_slice(&out.stdout).unwrap_or(serde_json::Value::Null);
+    let panes = value
+        .get("result")
+        .and_then(|r| r.get("panes"))
+        .and_then(|p| p.as_array());
+    Ok(panes
+        .map(|array| {
+            array
+                .iter()
+                .filter_map(|p| serde_json::from_value::<Pane>(p.clone()).ok())
+                .collect()
+        })
+        .unwrap_or_default())
+}
+
+fn current_pane() -> io::Result<Option<Pane>> {
+    let out = herdr_output(&["pane", "current"])?;
+    let value: serde_json::Value =
+        serde_json::from_slice(&out.stdout).unwrap_or(serde_json::Value::Null);
+    Ok(value
+        .get("result")
+        .and_then(|r| r.get("pane"))
+        .and_then(|p| serde_json::from_value::<Pane>(p.clone()).ok()))
+}
+
+/// Herdr has no focus-by-id; focusing a pane is a momentary zoom on/off cycle.
+fn focus_pane(pane_id: &str) {
+    let _ = Command::new(herdr())
+        .args(["pane", "zoom", pane_id, "--on"])
+        .status();
+    let _ = Command::new(herdr())
+        .args(["pane", "zoom", pane_id, "--off"])
+        .status();
+}
+
+fn plugin_config_dir() -> Option<String> {
+    let out = Command::new(herdr())
+        .args(["plugin", "config-dir", "prompt-deck"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let dir = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if dir.is_empty() {
+        None
+    } else {
+        Some(dir)
+    }
+}
+
+fn extract_new_pane_id(bytes: &[u8]) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_slice(bytes).ok()?;
+    value
+        .get("result")?
+        .get("pane")?
+        .get("pane_id")?
+        .as_str()
+        .map(str::to_string)
+}
+
+fn shell_quote(path: &str) -> String {
+    if cfg!(windows) {
+        format!("'{}'", path.replace('\'', "''"))
+    } else {
+        format!("'{}'", path.replace('\'', "'\\''"))
+    }
+}
+
+/// The command typed into the new pane's shell to start the deck.
+fn pane_run_command(target: &str) -> String {
+    let exe = env::current_exe().unwrap_or_default();
+    let quoted = shell_quote(&exe.to_string_lossy());
+    if cfg!(windows) {
+        format!("& {quoted} pane --target {target}")
+    } else {
+        format!("{quoted} pane --target {target}")
+    }
+}
+
+/// Toggle the deck: focus it if it exists, otherwise split a slim pane at the bottom
+/// and start the deck binary there, targeting the pane the caller came from.
+fn launch() -> io::Result<()> {
+    let panes = pane_list()?;
+
+    if let Some(deck) = panes.iter().find(|p| p.is_deck()) {
+        focus_pane(&deck.pane_id);
+        return Ok(());
+    }
+
+    let target = match panes.iter().find(|p| p.focused).cloned() {
+        Some(pane) => pane,
+        None => current_pane()?.ok_or_else(|| {
+            io::Error::new(io::ErrorKind::NotFound, "no focused pane to target")
+        })?,
+    };
+
+    let cwd = target.cwd.clone().unwrap_or_else(|| ".".to_string());
+    let mut args: Vec<String> = ["pane", "split", "--direction", "down", "--cwd", &cwd, "--ratio", "0.9", "--focus"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    if let Some(config_dir) = plugin_config_dir() {
+        args.push("--env".to_string());
+        args.push(format!("HERDR_PLUGIN_CONFIG_DIR={config_dir}"));
+    }
+
+    let out = Command::new(herdr()).args(&args).output()?;
+    let new_pane = extract_new_pane_id(&out.stdout)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "pane split returned no pane"))?;
+
+    let _ = Command::new(herdr())
+        .args(["pane", "rename", &new_pane, DECK_TITLE])
+        .status();
+
+    let command = pane_run_command(&target.pane_id);
+    Command::new(herdr())
+        .args(["pane", "run", &new_pane, &command])
+        .status()?;
+    Ok(())
+}
+
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
     match args.first().map(String::as_str).unwrap_or("pane") {
+        "launch" => {
+            if let Err(err) = launch() {
+                eprintln!("prompt-deck: {err}");
+                std::process::exit(1);
+            }
+        }
         "pane" => {
             let target = parse_target(&args).unwrap_or_default();
             let mut app = App::new(target);
@@ -726,5 +890,40 @@ fn truncate(s: &str, max: usize) -> String {
         let mut out: String = s.chars().take(max.saturating_sub(1)).collect();
         out.push('…');
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn deck_detected_from_any_title_field() {
+        let mut pane = Pane::default();
+        assert!(!pane.is_deck());
+        pane.label = Some("Prompt Deck".to_string());
+        assert!(pane.is_deck());
+        pane.label = None;
+        pane.terminal_title = Some("Prompt Deck".to_string());
+        assert!(pane.is_deck());
+        pane.terminal_title = None;
+        pane.terminal_title_stripped = Some("Prompt Deck".to_string());
+        assert!(pane.is_deck());
+    }
+
+    #[test]
+    fn unrelated_titles_are_not_the_deck() {
+        let pane = Pane {
+            terminal_title: Some("OC | building a plugin".to_string()),
+            ..Default::default()
+        };
+        assert!(!pane.is_deck());
+    }
+
+    #[test]
+    fn extracts_pane_id_from_split_reply() {
+        let json = br#"{"result":{"pane":{"pane_id":"w1:p2"},"type":"pane_info"}}"#;
+        assert_eq!(extract_new_pane_id(json).as_deref(), Some("w1:p2"));
+        assert_eq!(extract_new_pane_id(b"not json"), None);
     }
 }

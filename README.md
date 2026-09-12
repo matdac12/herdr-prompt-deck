@@ -1,5 +1,7 @@
 # Prompt Deck
 
+[![CI](https://github.com/matdac12/herdr-prompt-deck/actions/workflows/ci.yml/badge.svg)](https://github.com/matdac12/herdr-prompt-deck/actions/workflows/ci.yml)
+
 A bottom prompt bar for [Herdr](https://herdr.dev) — insert file paths, saved
 snippets, and scratch text into the focused coding agent **without submitting**.
 
@@ -27,8 +29,10 @@ a file path and two snippets and then hit Enter yourself.
 ## Requirements
 
 - Herdr **0.8.0** or newer
-- A Rust toolchain (`cargo`) — the plugin is built on install. Prebuilt binaries
-  are on the roadmap.
+
+The installer downloads a prebuilt binary for your OS and verifies its SHA-256, so
+you do **not** need Rust. If no prebuilt matches your platform and version, it
+falls back to building from source, which needs a Rust toolchain.
 
 ## Install
 
@@ -125,10 +129,18 @@ herdr plugin link .
 not run the build for you). After changing code, `cargo build --release` and the
 next toggle picks up the new binary.
 
+## Releases
+
+Push a tag matching the version in `Cargo.toml` and `herdr-plugin.toml`
+(e.g. `v0.1.0`) and the release workflow builds binaries for macOS
+(arm64 + x86_64), Linux (x86_64, static musl), and Windows (x86_64) and
+publishes them with a `SHA256SUMS` file. The installer picks the right asset.
+
 ## Platform support
 
-Developed and tested on **Windows**. The macOS/Linux launcher (`scripts/run.sh`)
-is written but untested — reports and fixes welcome.
+Developed and tested on **Windows**. macOS and Linux binaries are built in CI and
+the launcher logic is shared Rust code, but the Unix path has not yet been
+exercised against a live Herdr server — reports and fixes welcome.
 
 ## License
 
