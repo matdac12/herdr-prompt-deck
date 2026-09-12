@@ -1,0 +1,35 @@
+id = "prompt-deck"
+name = "Prompt Deck"
+version = "0.0.1"
+description = "A bottom prompt bar: insert file paths, saved snippets, and scratch text into the focused agent without submitting."
+min_herdr_version = "0.8.0"
+platforms = ["linux", "macos", "windows"]
+
+# herdr runs this at install time. Local `herdr plugin link` does not build, so authors
+# build the release binary themselves before linking.
+[[build]]
+command = ["cargo", "build", "--release"]
+
+# Toggle the deck. There is no declarative "open this pane" field on an action, so the
+# script opens/focuses the pane itself through the herdr CLI. Windows has no [[panes]]
+# entry: herdr cannot spawn a manifest pane's relative program on Windows (it resolves
+# against herdr's own directory), so the launcher spawns the binary by absolute path.
+[[actions]]
+id = "toggle"
+platforms = ["linux", "macos"]
+title = "Toggle Prompt Deck"
+description = "Open or focus the Prompt Deck bar at the bottom of the current tab."
+command = ["bash", "scripts/run.sh", "toggle"]
+
+[[actions]]
+id = "toggle-windows"
+platforms = ["windows"]
+title = "Toggle Prompt Deck"
+description = "Open or focus the Prompt Deck bar at the bottom of the current tab."
+# Locate the launcher by asking herdr for its own plugin root (an action's cwd is
+# unreliable on Windows), force UTF-8 before parsing that JSON, strip the `\\?\`
+# verbatim prefix herdr reports, then run the script by absolute path.
+command = [
+  "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+  '''$u=New-Object System.Text.UTF8Encoding($false); [Console]::OutputEncoding=$u; $OutputEncoding=$u; $b=$env:HERDR_BIN_PATH; if(-not $b){$b='herdr'}; $p=((& $b plugin list --json|ConvertFrom-Json).result.plugins|?{$_.plugin_id -eq 'prompt-deck'}).plugin_root; if($p -and $p.StartsWith('\\?\')){$p=$p.Substring(4)}; & (Join-Path (Join-Path $p 'scripts') 'run.ps1') toggle''',
+]

@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Herdr Prompt Toolbar — locked design</title>
+<style>
+  :root {
+    --bg:#0b0d10; --panel:#12151a; --panel2:#171b21; --line:#262c34; --linesoft:#1d2229;
+    --text:#d7dde5; --dim:#7c8794; --faint:#4d5663; --accent:#e8a33d; --accent2:#6fb3ff;
+    --green:#63c68a; --red:#e06c75; --purple:#b98cff;
+    --mono: ui-monospace,"SF Mono","Cascadia Mono","JetBrains Mono",Menlo,Consolas,monospace;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#06080a; color:var(--text); font-family:var(--mono); font-size:13px; line-height:1.45; display:flex; justify-content:center; padding:26px; }
+  .page { width:min(1120px,100%); }
+  h1 { font-size:15px; margin:0 0 4px; font-weight:600; }
+  h1 .sub { color:var(--dim); font-weight:400; }
+  .intro { color:var(--dim); font-size:12px; max-width:780px; margin:0 0 18px; }
+
+  .stage { border:1px solid var(--line); border-radius:11px; overflow:hidden; background:var(--bg); box-shadow:0 26px 70px -34px #000; }
+  .titlebar { display:flex; align-items:center; gap:10px; padding:9px 13px; background:var(--panel2); border-bottom:1px solid var(--line); color:var(--dim); font-size:11px; }
+  .lights { display:flex; gap:6px; }
+  .lights i { width:9px; height:9px; border-radius:50%; display:block; }
+  .lights i:nth-child(1){background:#e06c75;} .lights i:nth-child(2){background:#e8c05a;} .lights i:nth-child(3){background:#63c68a;}
+  .titlebar .path { margin-left:auto; color:var(--faint); }
+
+  .app { display:flex; min-height:560px; }
+  .sidebar { width:188px; flex:none; background:#0e1115; border-right:1px solid var(--line); padding:10px 9px; font-size:11.5px; }
+  .sb-title { color:var(--faint); text-transform:uppercase; letter-spacing:.9px; font-size:9.5px; margin:2px 4px 8px; }
+  .ws { display:flex; align-items:center; gap:7px; padding:5px 6px; border-radius:5px; color:var(--dim); }
+  .ws.active { background:#1b2129; color:var(--text); }
+  .dot { width:6px; height:6px; border-radius:50%; flex:none; }
+  .dot.working{background:var(--green); box-shadow:0 0 7px var(--green);}
+  .dot.idle{background:#3d4650;} .dot.blocked{background:var(--accent); box-shadow:0 0 7px var(--accent);}
+  .ws .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;} .ws .kind{margin-left:auto;color:var(--faint);font-size:10px;}
+
+  .main { flex:1; display:flex; flex-direction:column; min-width:0; }
+  .agent { flex:1; padding:12px 16px; background:radial-gradient(120% 90% at 100% 0%, #10151b 0%, var(--bg) 60%); min-height:230px; }
+  .agent-head { color:var(--dim); font-size:11px; margin-bottom:9px; display:flex; gap:8px; align-items:center; }
+  .badge { border:1px solid var(--line); border-radius:999px; padding:1px 8px; font-size:10px; color:var(--dim); }
+  .line { margin:2px 0; }
+  .g { color:var(--dim); } .you { color:var(--accent2); } .u { color:var(--text); }
+  .cursor { display:inline-block; width:7px; height:14px; background:var(--accent); vertical-align:-2px; animation:blink 1.1s steps(1) infinite; }
+  @keyframes blink { 50%{opacity:0;} }
+
+  .toolbar { border-top:1px solid var(--accent); background:#0b0f14; display:flex; flex-direction:column; height:196px; position:relative; }
+  .tb-pane-label { position:absolute; top:-9px; left:14px; background:#0b0f14; padding:0 6px; color:var(--accent); font-size:9.5px; letter-spacing:1px; text-transform:uppercase; }
+  .tb-bar { display:flex; align-items:center; gap:4px; padding:6px 10px 5px; border-bottom:1px solid var(--linesoft); background:#0d1218; }
+  .tb-bar .mode { padding:3px 11px; border-radius:5px; color:var(--faint); cursor:pointer; font-size:12px; }
+  .tb-bar .mode:hover { color:var(--dim); }
+  .tb-bar .mode.on { background:#20262e; color:var(--accent); }
+  .tb-bar .target { margin-left:auto; color:var(--faint); font-size:11px; }
+  .tb-bar .target b { color:var(--accent2); font-weight:600; }
+  .tb-body { flex:1; padding:8px 12px; overflow:hidden; }
+  .tb-foot { display:flex; gap:15px; padding:5px 12px; border-top:1px solid var(--linesoft); background:#0a0e13; color:var(--faint); font-size:10.5px; }
+  .tb-foot b { color:var(--dim); font-weight:600; }
+  .tb-foot .right { margin-left:auto; }
+
+  .col h4 { margin:0 0 6px; font-size:10px; letter-spacing:.8px; text-transform:uppercase; color:var(--faint); font-weight:600; }
+  .item { color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding:1px 4px; border-radius:4px; }
+  .item.on { color:var(--accent); background:#1a2027; }
+  .item .k { color:var(--faint); }
+  .hint { color:var(--faint); }
+  .split { display:flex; gap:26px; }
+  .fuzzy { color:var(--text); border-bottom:1px solid var(--accent); padding:0 2px; }
+  .caret { display:inline-block; width:7px; height:14px; background:var(--accent); vertical-align:-2px; animation:blink 1.1s steps(1) infinite; }
+  .edited { color:var(--text); }
+  .empty { color:var(--faint); }
+
+  .hidden { display:none !important; }
+
+  .side-note { position:relative; }
+  .notes { margin-top:18px; display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:9px; padding:13px 15px; }
+  .card h3 { margin:0 0 7px; font-size:12px; color:var(--text); }
+  .card p { margin:0 0 7px; color:var(--dim); font-size:11.5px; line-height:1.55; }
+  .card ul { margin:6px 0 0; padding-left:16px; color:var(--dim); font-size:11.5px; }
+  .card li { margin:3px 0; }
+  .card.good h3 { color:var(--green); }
+  kbd { border:1px solid var(--line); border-bottom-width:2px; border-radius:4px; padding:0 5px; color:var(--dim); font-size:11px; background:#12161b; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Herdr Prompt Toolbar <span class="sub">— locked design</span></h1>
+  <p class="intro">
+    A normal Herdr pane pinned at the bottom of the tab, owned by the plugin. Switch to it by clicking or
+    with <kbd>prefix ↑/↓</kbd>; it never steals focus and never auto-closes. Pick a file / snippet / write in the
+    editor and the text is inserted into the agent's prompt (never submitted). <kbd>esc</kbd> inside the toolbar closes it.
+  </p>
+
+  <div class="stage">
+    <div class="titlebar">
+      <div class="lights"><i></i><i></i><i></i></div>
+      <span>herdr</span>
+      <span class="path">~/Projects/web-dashboard · session: main</span>
+    </div>
+
+    <div class="app">
+      <div class="sidebar">
+        <div class="sb-title">Workspaces</div>
+        <div class="ws active"><span class="dot blocked"></span><span class="name">web-dashboard</span><span class="kind">claude</span></div>
+        <div class="ws"><span class="dot working"></span><span class="name">herdr</span><span class="kind">opencode</span></div>
+        <div class="ws"><span class="dot idle"></span><span class="name">data-pipeline</span><span class="kind">codex</span></div>
+        <div class="sb-title" style="margin-top:16px;">Keybinding</div>
+        <div class="ws"><span class="name"><kbd>prefix</kbd>+<kbd>t</kbd></span><span class="kind">toolbar</span></div>
+      </div>
+
+      <div class="main">
+        <!-- AGENT PANE -->
+        <div class="agent">
+          <div class="agent-head"><span class="badge">Claude Code</span> ~/Projects/web-dashboard <span class="badge">feat/usage-charts</span></div>
+          <div class="line g">● UsageChart.tsx written — typecheck clean, ready to ship.</div>
+          <div class="line g">&nbsp;</div>
+          <div class="line you">❯ <span class="u">add a tooltip to the chart and check</span> <span class="edited">C:\Users\MattiaDaCampo\Documents\HERDR\src\components\UsageChart.tsx</span> <span class="caret"></span></div>
+          <div class="line hint" style="margin-top:10px;">↑ the path above was dropped in by the toolbar; nothing was submitted.</div>
+        </div>
+
+        <!-- TOOLBAR PANE -->
+        <div class="toolbar">
+          <div class="tb-pane-label">toolbar pane</div>
+          <div class="tb-bar">
+            <span class="mode on" data-mode="files">Files</span>
+            <span class="mode" data-mode="snippets">Snippets</span>
+            <span class="mode" data-mode="editor">Editor</span>
+            <span class="target">inserting into <b>web-dashboard · claude</b></span>
+          </div>
+
+          <!-- FILES -->
+          <div class="tb-body" id="body-files">
+            <div class="split">
+              <div class="col" style="flex:1.2;">
+                <h4>Browse your filesystem</h4>
+                <div class="item"><b style="color:var(--accent)">b</b> &nbsp;open the native file dialog…</div>
+                <div class="hint" style="margin-top:6px;">Returns the file's absolute path and inserts it into the prompt.</div>
+              </div>
+              <div class="col" style="flex:1;">
+                <h4>Recently picked</h4>
+                <div class="item on">…\src\components\UsageChart.tsx</div>
+                <div class="item">…\src\routes\usage.tsx</div>
+                <div class="item">…\docs\plugins.mdx</div>
+                <div class="empty" style="margin-top:4px;">re-pick with ↵</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SNIPPETS -->
+          <div class="tb-body hidden" id="body-snippets">
+            <div class="split">
+              <div class="col" style="flex:1.5;">
+                <h4>Filter&nbsp; <span class="fuzzy">fix</span></h4>
+                <div class="item on">/fix-tests — run the suite and fix failures</div>
+                <div class="item">/fix-lint — fix lint errors in the current diff</div>
+                <div class="item">/fix-flaky — investigate a flaky test</div>
+              </div>
+              <div class="col" style="flex:1;">
+                <h4>Actions</h4>
+                <div class="item"><b style="color:var(--accent)">↵</b> insert snippet</div>
+                <div class="item"><b style="color:var(--accent)">n</b> new snippet…</div>
+                <div class="item"><b style="color:var(--accent)">e</b> edit &nbsp; <b style="color:var(--accent)">d</b> delete</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- EDITOR -->
+          <div class="tb-body hidden" id="body-editor">
+            <div class="col">
+              <h4>Compose</h4>
+              <div class="edited">Please review the diff on the usage chart and</div>
+              <div class="edited">suggest improvements to the empty state.<span class="caret"></span></div>
+              <div class="hint" style="margin-top:8px;">free text — newlines are kept, nothing is submitted</div>
+            </div>
+          </div>
+
+          <div class="tb-foot" id="foot">
+            <span><b>1/2/3</b> switch tool</span>
+            <span><b>esc</b> close toolbar</span>
+            <span class="right">pasted text goes to the last agent pane you were in</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="card good">
+      <h3>How it behaves</h3>
+      <ul>
+        <li>Lives at the bottom of the tab; you <b>click it</b> or <kbd>prefix ↑/↓</kbd> to focus it.</li>
+        <li>Pasting uses <code>herdr pane send-text</code>, so the agent's input receives the text but nothing is submitted.</li>
+        <li><kbd>esc</kbd> closes the pane and refocuses the agent.</li>
+        <li>Works the same whether the neighbour is Claude Code, OpenCode, or Codex.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>The three tools</h3>
+      <ul>
+        <li><b>Files</b> — native OS dialog, inserts the absolute path (plus a small recent list).</li>
+        <li><b>Snippets</b> — your saved prompts, fuzzy filter, <kbd>n</kbd> to create, <kbd>e</kbd>/<kbd>d</kbd> to edit/delete.</li>
+        <li><b>Editor</b> — write anything and insert it.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Storage &amp; sharing</h3>
+      <p>Snippets live in a hand-editable file under the plugin's config dir, so you can also edit them outside Herdr.</p>
+    </div>
+    <div class="card">
+      <h3>Open questions</h3>
+      <ul>
+        <li>Height: taller than you'd like? We can shrink it and have tools expand only while active.</li>
+        <li>How many rows would you want when idle — did you want it collapsed to a single line?</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+  const modes = document.querySelectorAll('.tb-bar .mode');
+  const bodies = { files: document.getElementById('body-files'), snippets: document.getElementById('body-snippets'), editor: document.getElementById('body-editor') };
+  modes.forEach(m => m.addEventListener('click', () => {
+    modes.forEach(x => x.classList.remove('on'));
+    m.classList.add('on');
+    Object.values(bodies).forEach(b => b.classList.add('hidden'));
+    bodies[m.dataset.mode].classList.remove('hidden');
+  }));
+</script>
+</body>
+</html>
