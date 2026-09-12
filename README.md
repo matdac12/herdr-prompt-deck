@@ -142,6 +142,10 @@ Developed and tested on **Windows**. macOS and Linux binaries are built in CI an
 the launcher logic is shared Rust code, but the Unix path has not yet been
 exercised against a live Herdr server — reports and fixes welcome.
 
+The file picker uses the native OS dialog on Windows and macOS. On Linux there is
+no in-process dialog, so Prompt Deck calls `zenity` (GNOME) or `kdialog` (KDE);
+install one of them, or the Files tool will report that no dialog is available.
+
 ## License
 
 [MIT](LICENSE)

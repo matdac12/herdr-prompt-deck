@@ -58,6 +58,7 @@ fn pane_cwd(pane_id: &str) -> Option<String> {
 }
 
 /// Native OS file dialog; returns the chosen file's absolute path.
+#[cfg(any(windows, target_os = "macos"))]
 fn pick_file(start_dir: Option<&str>) -> Option<String> {
     let mut dialog = rfd::FileDialog::new().set_title("Select a file to insert");
     if let Some(dir) = start_dir {
@@ -66,6 +67,52 @@ fn pick_file(start_dir: Option<&str>) -> Option<String> {
     dialog
         .pick_file()
         .map(|path| path.to_string_lossy().into_owned())
+}
+
+/// Linux has no supported in-process dialog; use `zenity` (GNOME) or `kdialog` (KDE).
+/// Keeps the binary free of gtk/wayland build dependencies.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn pick_file(start_dir: Option<&str>) -> Option<String> {
+    use std::process::Stdio;
+
+    // `None` = command not installed; `Some(None)` = cancelled; `Some(Some(p))` = chosen.
+    fn run(cmd: &str, args: &[String]) -> Option<Option<String>> {
+        match Command::new(cmd)
+            .args(args)
+            .stderr(Stdio::null())
+            .output()
+        {
+            Err(_) => None,
+            Ok(out) => {
+                if out.status.success() {
+                    let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                    Some(if path.is_empty() { None } else { Some(path) })
+                } else {
+                    Some(None)
+                }
+            }
+        }
+    }
+
+    let mut zenity = vec!["--file-selection".to_string()];
+    zenity.push("--title=Select a file to insert".to_string());
+    if let Some(dir) = start_dir.filter(|d| !d.is_empty()) {
+        zenity.push(format!("--filename={dir}"));
+    }
+    if let Some(result) = run("zenity", &zenity) {
+        return result;
+    }
+
+    let kdialog = vec![
+        "--getopenfilename".to_string(),
+        start_dir.unwrap_or("").to_string(),
+    ];
+    if let Some(result) = run("kdialog", &kdialog) {
+        return result;
+    }
+
+    eprintln!("prompt-deck: no native file dialog found (install zenity or kdialog)");
+    None
 }
 
 fn parse_target(args: &[String]) -> Option<String> {
