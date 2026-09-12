@@ -21,10 +21,14 @@ at the bottom of the tab, you drop things into the prompt, and you keep working.
 - **Files** — opens your real OS file dialog, then inserts the file's absolute path.
 - **Snippets** — a searchable library of prompts you reuse, stored in a plain
   `snippets.toml` you can also edit by hand.
-- **Editor** — compose free text and insert it. *(coming soon)*
+- **Editor** — a persistent scratchpad. The tab is just a launcher: press `↵` to open
+  a floating always-on-top window (Windows), compose there, and send it to the agent.
 
 Everything is inserted into the agent's input, never submitted, so you can stack
-a file path and two snippets and then hit Enter yourself.
+a file path and two snippets and then hit Enter yourself. Multi-line content
+(snippets, the editor) is sent as a **bracketed paste**, so its newlines don't
+submit either — it lands as multiple lines in the prompt. This relies on the target
+app supporting bracketed paste, which modern coding agents and shells do.
 
 ## Requirements
 
@@ -92,6 +96,28 @@ Reload the config with `prefix+shift+r`, or run `herdr server reload-config`.
 | `ctrl+d` | delete the selected snippet |
 | `tab` *(in the form)* | switch between name and text |
 | `ctrl+s` *(in the form)* | save |
+
+**Editor**
+
+Press `↵` on the Editor tab to open the floating scratchpad window.
+
+| Key (in the window) | Action |
+| --- | --- |
+| `Ctrl+Enter` | send the text into the target agent prompt |
+| *(button)* | **Send to agent** — same as `Ctrl+Enter` |
+
+The scratchpad is backed by a persistent file, `scratch.md`, in the same config
+directory as `snippets.toml`; closing the window keeps its text.
+
+On **Windows**, `↵` opens Prompt Deck's own always-on-top window: type or paste there
+(over any app), then `Ctrl+Enter` or **Send to agent** pushes the text straight into
+the target pane. Press `↵` again to raise the existing window instead of opening
+another.
+
+On **macOS / Linux** the OS editor is used instead (`$VISUAL` / `$EDITOR`, else
+`open -e` / `xdg-open`).
+
+Inserting is always `pane send-text` (never Enter), so it lands in the agent's input.
 
 The bar opens as a slim split at the bottom of the current pane, targets the
 agent you were last focused on, and gets out of the way when you press `esc`.

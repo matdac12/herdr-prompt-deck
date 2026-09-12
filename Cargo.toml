@@ -20,3 +20,13 @@ toml = "0.8"
 # and keep the Linux binary free of system libraries.
 [target.'cfg(any(windows, target_os = "macos"))'.dependencies]
 rfd = "0.15"
+
+# Win32 APIs for the native always-on-top scratchpad window (`prompt-deck window`).
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_System_LibraryLoader",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_WindowsAndMessaging",
+] }

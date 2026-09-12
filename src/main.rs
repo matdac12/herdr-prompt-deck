@@ -18,6 +18,9 @@ use ratatui::widgets::Paragraph;
 use ratatui::{Frame, Terminal};
 use serde::{Deserialize, Serialize};
 
+#[cfg(windows)]
+mod win_editor;
+
 const SNIPPETS_HEADER: &str = "\
 # Prompt Deck snippets — hand-editable.
 # Each entry is a [[snippet]] with a name and text. Prompt Deck rewrites this
@@ -28,9 +31,21 @@ fn herdr() -> String {
     env::var("HERDR_BIN_PATH").unwrap_or_else(|_| "herdr".to_string())
 }
 
+/// Wrap multi-line text in bracketed-paste markers so the target TUI treats it as
+/// a paste (newlines inserted, not submitted). A bare `\n` from `send-text` is an
+/// Enter, which would execute or submit each line. Single-line text needs no wrap.
+fn encode_input(text: &str) -> std::borrow::Cow<'_, str> {
+    if text.contains('\n') {
+        std::borrow::Cow::Owned(format!("\x1b[200~{text}\x1b[201~"))
+    } else {
+        std::borrow::Cow::Borrowed(text)
+    }
+}
+
 fn send_text(pane: &str, text: &str) {
+    let payload = encode_input(text);
     match Command::new(herdr())
-        .args(["pane", "send-text", pane, text])
+        .args(["pane", "send-text", pane, payload.as_ref()])
         .status()
     {
         Ok(status) if status.success() => {}
@@ -168,6 +183,53 @@ fn config_dir() -> PathBuf {
 
 fn snippets_path() -> PathBuf {
     config_dir().join("snippets.toml")
+}
+
+/// A scratchpad file shared with the floating editor window. Persistent across runs.
+fn scratch_path() -> PathBuf {
+    config_dir().join("scratch.md")
+}
+
+/// The GUI editor to open for the floating scratchpad on platforms without a
+/// native deck window. `$VISUAL` then `$EDITOR` take precedence; otherwise a
+/// platform default.
+#[cfg(not(windows))]
+fn external_editor() -> (String, Vec<String>) {
+    for var in ["VISUAL", "EDITOR"] {
+        if let Ok(value) = env::var(var) {
+            let mut parts = value.split_whitespace();
+            if let Some(program) = parts.next() {
+                return (program.to_string(), parts.map(str::to_string).collect());
+            }
+        }
+    }
+    if cfg!(target_os = "macos") {
+        ("open".to_string(), vec!["-e".to_string()])
+    } else {
+        ("xdg-open".to_string(), Vec::new())
+    }
+}
+
+/// Open the floating scratchpad. Windows launches our own always-on-top window
+/// (`prompt-deck window`) so the send action lives in the same window that has
+/// focus; other platforms open the OS editor on `scratch.md`.
+fn spawn_scratch_editor(target: &str) -> io::Result<()> {
+    #[cfg(windows)]
+    {
+        let exe = env::current_exe()?;
+        Command::new(exe)
+            .args(["window", "--target", target])
+            .spawn()?;
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = target;
+        let (program, mut args) = external_editor();
+        args.push(scratch_path().to_string_lossy().into_owned());
+        Command::new(&program).args(&args).spawn()?;
+        Ok(())
+    }
 }
 
 fn load_snippets() -> Vec<Snippet> {
@@ -376,6 +438,13 @@ impl App {
         self.selected = 0;
     }
 
+    fn open_scratch_editor(&mut self) {
+        match spawn_scratch_editor(&self.target) {
+            Ok(()) => self.status = Some("opened the scratchpad".to_string()),
+            Err(err) => self.status = Some(format!("editor failed: {err}")),
+        }
+    }
+
     fn on_key(&mut self, key: KeyEvent) {
         if self.editing.is_some() {
             self.edit_key(key);
@@ -399,7 +468,7 @@ impl App {
         match self.mode {
             Mode::Files => self.files_key(key),
             Mode::Snippets => self.snippets_key(key),
-            Mode::Editor => {}
+            Mode::Editor => self.editor_key(key),
         }
     }
 
@@ -435,6 +504,12 @@ impl App {
                 self.clamp_selection();
             }
             _ => {}
+        }
+    }
+
+    fn editor_key(&mut self, key: KeyEvent) {
+        if key.code == KeyCode::Enter {
+            self.open_scratch_editor();
         }
     }
 
@@ -657,6 +732,18 @@ fn main() {
                 eprintln!("prompt-deck: {err}");
             }
         }
+        "window" => {
+            let target = parse_target(&args).unwrap_or_default();
+            #[cfg(windows)]
+            if let Err(err) = win_editor::run(&target) {
+                eprintln!("prompt-deck: {err}");
+            }
+            #[cfg(not(windows))]
+            {
+                let _ = target;
+                eprintln!("prompt-deck: the floating window is only available on Windows");
+            }
+        }
         other => eprintln!("prompt-deck: unknown mode '{other}'"),
     }
 }
@@ -871,13 +958,19 @@ fn content_snippets(app: &App) -> Vec<Line<'static>> {
 }
 
 fn content_editor() -> Vec<Line<'static>> {
+    let subtitle = if cfg!(windows) {
+        "  Press ↵ to open the floating scratchpad window"
+    } else {
+        "  Press ↵ to open the scratchpad in your editor"
+    };
     vec![
         Line::from(Span::styled(
             "Editor",
             Style::default().add_modifier(Modifier::BOLD),
         )),
+        Line::from(Span::styled(subtitle, Style::default().fg(Color::Gray))),
         Line::from(Span::styled(
-            "  coming next: compose text and insert it",
+            "  compose there, then Ctrl+Enter sends it to the agent",
             Style::default().fg(Color::DarkGray),
         )),
     ]
@@ -899,7 +992,7 @@ fn footer(app: &App, width: u16) -> Paragraph<'static> {
                 ("tab", "tools"),
                 ("esc", "close"),
             ],
-            Mode::Editor => &[("tab", "tools"), ("esc", "close")],
+            Mode::Editor => &[("↵", "open editor"), ("tab", "tools"), ("esc", "close")],
         }
     };
 
@@ -972,5 +1065,11 @@ mod tests {
         let json = br#"{"result":{"pane":{"pane_id":"w1:p2"},"type":"pane_info"}}"#;
         assert_eq!(extract_new_pane_id(json).as_deref(), Some("w1:p2"));
         assert_eq!(extract_new_pane_id(b"not json"), None);
+    }
+
+    #[test]
+    fn multiline_text_is_bracketed_for_paste() {
+        assert_eq!(encode_input("just one line"), "just one line");
+        assert_eq!(encode_input("a\nb"), "\x1b[200~a\nb\x1b[201~");
     }
 }
