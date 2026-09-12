@@ -104,15 +104,16 @@ Press `↵` on the Editor tab to open the floating scratchpad window.
 | Key (in the window) | Action |
 | --- | --- |
 | `Ctrl+Enter` | send the text into the target agent prompt |
-| *(button)* | **Send to agent** — same as `Ctrl+Enter` |
+| `Ctrl+O` | open the native file dialog and insert the file's path |
+| *(button)* | **Send to agent** / **Insert file...** / **Clear** |
 
 The scratchpad is backed by a persistent file, `scratch.md`, in the same config
 directory as `snippets.toml`; closing the window keeps its text.
 
 On **Windows**, `↵` opens Prompt Deck's own always-on-top window: type or paste there
-(over any app), then `Ctrl+Enter` or **Send to agent** pushes the text straight into
-the target pane. Press `↵` again to raise the existing window instead of opening
-another.
+(over any app), press `Ctrl+O` to drop in file paths, then `Ctrl+Enter` or **Send to
+agent** pushes the text straight into the target pane. Press `↵` again to raise the
+existing window instead of opening another.
 
 On **macOS / Linux** the OS editor is used instead (`$VISUAL` / `$EDITOR`, else
 `open -e` / `xdg-open`).

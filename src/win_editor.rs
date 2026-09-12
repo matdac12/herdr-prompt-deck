@@ -48,17 +48,22 @@ const EN_CHANGE: u16 = 0x0300;
 
 const SW_SHOW: i32 = 5;
 const VK_RETURN: u16 = 0x0D;
+const VK_O: u16 = 0x4F;
 const FCONTROL: u8 = 0x08;
 const FVIRTKEY: u8 = 0x01;
+
+const EM_REPLACESEL: u32 = 0x00C2;
 
 const ID_SEND: usize = 1;
 const ID_CLEAR: usize = 2;
 const ID_EDIT: usize = 3;
+const ID_FILE: usize = 4;
 
 struct EditorState {
     target: String,
     edit: HWND,
     send: HWND,
+    file: HWND,
     clear: HWND,
     scratch: std::path::PathBuf,
 }
@@ -111,6 +116,7 @@ unsafe fn run_window(target: &str) -> io::Result<()> {
             target: target.to_string(),
             edit: null_mut(),
             send: null_mut(),
+            file: null_mut(),
             clear: null_mut(),
             scratch: crate::scratch_path(),
         });
@@ -137,12 +143,19 @@ unsafe fn run_window(target: &str) -> io::Result<()> {
         return Err(io::Error::last_os_error());
     }
 
-    let accel = ACCEL {
-        fVirt: FCONTROL | FVIRTKEY,
-        key: VK_RETURN,
-        cmd: ID_SEND as u16,
-    };
-    let haccel = unsafe { CreateAcceleratorTableW(&accel, 1) };
+    let accels = [
+        ACCEL {
+            fVirt: FCONTROL | FVIRTKEY,
+            key: VK_RETURN,
+            cmd: ID_SEND as u16,
+        },
+        ACCEL {
+            fVirt: FCONTROL | FVIRTKEY,
+            key: VK_O,
+            cmd: ID_FILE as u16,
+        },
+    ];
+    let haccel = unsafe { CreateAcceleratorTableW(accels.as_ptr(), accels.len() as i32) };
 
     unsafe {
         ShowWindow(hwnd, SW_SHOW);
@@ -215,6 +228,7 @@ fn on_create(hwnd: HWND) -> LRESULT {
     let hinst = unsafe { GetModuleHandleW(null()) };
     let edit = child(hwnd, hinst, "EDIT", "", EDIT_STYLE, ID_EDIT);
     let send = child(hwnd, hinst, "BUTTON", "Send to agent  (Ctrl+Enter)", BUTTON_STYLE, ID_SEND);
+    let file = child(hwnd, hinst, "BUTTON", "Insert file...  (Ctrl+O)", BUTTON_STYLE, ID_FILE);
     let clear = child(hwnd, hinst, "BUTTON", "Clear", BUTTON_STYLE, ID_CLEAR);
 
     let face = wide("Consolas");
@@ -234,6 +248,7 @@ fn on_create(hwnd: HWND) -> LRESULT {
         if let Some(st) = s.borrow_mut().as_mut() {
             st.edit = edit;
             st.send = send;
+            st.file = file;
             st.clear = clear;
         }
     });
@@ -244,17 +259,18 @@ fn on_size(hwnd: HWND) {
     let mut rc: windows_sys::Win32::Foundation::RECT = unsafe { std::mem::zeroed() };
     unsafe { GetClientRect(hwnd, &mut rc) };
 
-    let (edit, send, clear) = STATE.with(|s| {
+    let (edit, send, file, clear) = STATE.with(|s| {
         let b = s.borrow();
         match b.as_ref() {
-            Some(st) => (st.edit, st.send, st.clear),
-            None => (null_mut(), null_mut(), null_mut()),
+            Some(st) => (st.edit, st.send, st.file, st.clear),
+            None => (null_mut(), null_mut(), null_mut(), null_mut()),
         }
     });
 
     let margin = 8;
     let btn_h = 32;
     let send_w = 200;
+    let file_w = 150;
     let clear_w = 90;
     let height = rc.bottom - rc.top;
     let width = rc.right - rc.left;
@@ -264,7 +280,8 @@ fn on_size(hwnd: HWND) {
         MoveWindow(edit, margin, margin, width - margin * 2, edit_h, 1);
         let y = height - margin - btn_h;
         MoveWindow(send, margin, y, send_w, btn_h, 1);
-        MoveWindow(clear, margin + send_w + 8, y, clear_w, btn_h, 1);
+        MoveWindow(file, margin + send_w + 8, y, file_w, btn_h, 1);
+        MoveWindow(clear, margin + send_w + file_w + 16, y, clear_w, btn_h, 1);
     }
 }
 
@@ -273,6 +290,7 @@ fn on_command(hwnd: HWND, wparam: WPARAM) {
     let code = ((wparam >> 16) & 0xFFFF) as u16;
     match id {
         ID_SEND => send_to_agent(hwnd),
+        ID_FILE => insert_file_path(),
         ID_CLEAR => clear_edit(),
         ID_EDIT if code == EN_CHANGE => reset_title(hwnd),
         _ => {}
@@ -309,6 +327,23 @@ fn send_to_agent(hwnd: HWND) {
     crate::send_text(&target, &text);
     let title = wide("Prompt Deck - sent to agent");
     unsafe { SetWindowTextW(hwnd, title.as_ptr()) };
+}
+
+/// Open the native file dialog and insert the chosen path at the caret.
+fn insert_file_path() {
+    let Some((edit, target)) = with_state(|st| (st.edit, st.target.clone())) else {
+        return;
+    };
+    let mut dialog = rfd::FileDialog::new().set_title("Select a file to insert");
+    if let Some(dir) = crate::pane_cwd(&target) {
+        dialog = dialog.set_directory(dir);
+    }
+    let Some(path) = dialog.pick_file() else {
+        return;
+    };
+    let insertion = wide(&format!("{} ", path.to_string_lossy()));
+    unsafe { SendMessageW(edit, EM_REPLACESEL, 1, insertion.as_ptr() as LPARAM) };
+    unsafe { SetFocus(edit) };
 }
 
 fn clear_edit() {
